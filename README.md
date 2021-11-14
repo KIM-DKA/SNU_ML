@@ -38,5 +38,17 @@ Use these biomechanical features to classify patients according to their labels
 --- 
 
 ### 분석 목적 
+
 수업시간에 배운 Introduction to Statistical Learning의 머신러닝 기법을 활용하여 
-데이터의 특징에 맞는 Classification 퍼포먼스를 측정하기 
+3category 에 대한 Classification과 2Category의 Classfication을 진행하고자 함 
+
+--- 
+
+### 분석 방법 
+
+* Logistict 
+* Tree Based Model 
+* LDA or QDA (클래스별 분포 확인후 결정)
+* KNN 
+* Random Forest 
+* Boosting 계열의 모형 
