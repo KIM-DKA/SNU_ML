@@ -1,0 +1,417 @@
+---
+title: "보건학을 위한 기계학습 최종 보고서"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+
+### **목차** 
+* 0.분석목적 
+* 1.데이터소개
+* 2.데이터탐색(EDA) 
+* 3.데이터 핸들링
+* 4.모델링 
+* 5.결론
+
+--- 
+
+### **0.분석목적** 
+##### 척추전방위증 환자,정상 여부를 Accuracy기준으로 Classification 하여 Best 한 성능을 갖는 모형 찾기 
+
+
+--- 
+
+
+### **1.데이터소개**
+##### 척추전방전위증은 위 척추뼈가 아래 척추뼈보다 앞으로 밀려나가면서 배 쪽으로 튀어나와 신경을 손상시켜 허리통증과 다리 저림을 일으키는 질환입니다.
+
+<center>
+!['척추전방전위증 소개'](image1.jpg)
+</center>
+
+---
+
+#### 1-1) 변수(Feature) 설명
+
+---
+<center>
+!['골반관련 정보'](image2.png)
+</center>
+
+
+* pelvic incidence(PI) : 골반 경사 
+* pelvic tilt(PT) : 골반 기울기
+* sacral slope(SS) : 천골경사
+
+<center>
+!['척추관련 정보'](image3.jpg){width=50%}
+</center>
+
+
+
+* lumbar lordosis angle(LLA) : 요추전만각도, 척추 1번과 5번 사이의 각도
+* pelvic radius : 골반과 척추반위증 사이의 반경 
+
+
+<center>
+!['척추관련 정보'](image4.webp){width=80%}
+</center>
+
+* degree of spondylolisthesis : 척추전방전위증 정도
+* **class** : 척추전방전위증(Abnormal), 정상(Normal) 의 Binary Data (분석 Target)
+
+#### 1-2) 데이터 불러오기
+
+
+```{r}
+setwd('C:/Users/rlaem/Desktop/student/SNU/machine_learning/main')
+data <- read.csv('column_2C_weka.csv',header=T)
+head(data); dim(data)
+```
+
+#### 1-3) Data 확인
+
+```{r}
+str(data)
+```
+
+#### 1-4) Train과 Test set 분리 
+
+```{r}
+set.seed(1234)
+idx <- sample(1:nrow(data),size=100,replace = FALSE)
+train  <- data[-idx,];
+test <- data[idx,]
+
+train$class <- ifelse(train$class =='Abnormal',1,0)
+test$class <- ifelse(test$class =='Abnormal',1,0)
+
+```
+
+#### 1-5) 사용 Library 
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(dplyr) # 데이터 핸들링 
+library(ggplot2)  # 데이터 시각화 
+library(gridExtra)
+library(corrplot) # 상관관계 plot
+library(glmnet) # elastict net
+library(e1071) #svm, Naive Bayes 
+library(randomForest) #랜포  
+library(gbm) # boosting계열모형 
+library(GGally)
+
+
+```
+
+
+---
+
+### **2.데이터 탐색(EDA)**
+
+#### 2-1) 척추전방전위증 정상 / 비정상 확인
+
+```{r}
+ggplot(train,aes(x=class,fill=as.factor(class)))+geom_bar(stat = 'count')+labs(x = '정상(0),비정상(1) 비율 확인') +
+  geom_label(stat='count',aes(label=..count..), size=7) 
+
+```
+
+#### 2-2) 설명변수 Histogram 확인 
+
+```{r}
+s1<-ggplot(train,aes(x=pelvic_incidence ))+geom_histogram(binwidth = 5, fill='red',alpha=0.5) + theme_grey() +
+  scale_x_continuous(breaks= seq(0, 150, by=10))
+
+
+
+s2<-ggplot(train,aes(x=pelvic_tilt.numeric ))+geom_histogram(binwidth = 5, fill='red',alpha=0.5) + theme_grey() +
+  scale_x_continuous(breaks= seq(0, 150, by=10))
+
+s3<-ggplot(train,aes(x=lumbar_lordosis_angle ))+geom_histogram(binwidth = 5, fill='red',alpha=0.5) + theme_grey() +
+  scale_x_continuous(breaks= seq(0, 150, by=10))
+
+s4<-ggplot(train,aes(x=sacral_slope ))+geom_histogram(binwidth = 5, fill='red',alpha=0.5) + theme_grey() +
+  scale_x_continuous(breaks= seq(0, 150, by=10))
+
+s5<-ggplot(train,aes(x=pelvic_radius ))+geom_histogram(binwidth = 5, fill='red',alpha=0.5) + theme_grey() +
+  scale_x_continuous(breaks= seq(0, 150, by=10))
+
+s6<-ggplot(train,aes(x=degree_spondylolisthesis ))+geom_histogram(binwidth = 5, fill='red',alpha=0.5) + theme_grey() 
+
+grid.arrange(s1,s2,s3,s4,s5,s6)
+```
+
+#### 2-3) abnormal 과 normal class별 설명변수 Density 확인 
+
+```{r}
+s1<-ggplot(train,aes(x=pelvic_incidence,fill=class))+geom_density(alpha=0.5, aes(fill=factor(class))) + labs(title="pelvic_incidence")  + theme_grey()
+
+s2<-ggplot(train,aes(x=pelvic_tilt.numeric,fill=class))+geom_density(alpha=0.5, aes(fill=factor(class))) + labs(title="pelvic tilt")  + theme_grey()
+
+s3<-ggplot(train,aes(x=lumbar_lordosis_angle,fill=class))+geom_density(alpha=0.5, aes(fill=factor(class))) + labs(title="lumbar lordosis angle") + theme_grey()
+
+
+s4<-ggplot(train,aes(x=sacral_slope,fill=class))+geom_density(alpha=0.5, aes(fill=factor(class))) + labs(title="sacral slope") +scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) + theme_grey()
+
+s5<-ggplot(train,aes(x=pelvic_radius,fill=class))+geom_density(alpha=0.5, aes(fill=factor(class))) + labs(title="pelvic radius") + theme_grey()
+
+s6<-ggplot(train,aes(x=degree_spondylolisthesis,fill=class))+geom_density(alpha=0.5, aes(fill=factor(class))) + labs(title="grade of spondylolisthesis") + theme_grey()
+grid.arrange(s1,s2,s3,s4,s5,s6)
+```
+
+_**grade of spondylolisthesis**가 Classification에 중요한 변수일 수 있음(주관적 판단)_
+
+
+#### 2-4) Pair plot  
+
+```{r}
+ggpairs(data=train,columns = 1:6,aes(colour=as.factor(class),alpha=0.5))
+```
+
+_몇몇 설명변수 사이의 **multicollinearity** 확인_ 
+
+### **3.데이터 핸들링**### 
+
+#### 3-1) 데이터 Matrix 변환 및 Normalization 
+
+```{r}
+
+form_x <-  formula(paste0('~',paste0(colnames(train[1:6]),collapse = '+')))
+
+# Train 데이터 Handling 
+
+train_x_mat <- as.matrix(train[,1:6])
+train_y_mat <- train[,7]
+
+#Train 데이터 Mean,SD 
+
+train_mean <- sapply(train[,-which(colnames(train) ==  "class")],function(x) mean(x))
+train_sd <-  sapply(train[,-which(colnames(train) ==  "class")],function(x) sd(x))
+
+# Train 데이터 정규화 
+train_x_mat <- scale(train_x_mat)
+
+# Test Data Handling 
+test_x_mat <- as.matrix(test[,1:6])
+
+
+for(i in 1:6){
+  
+  test_x_mat[,i] <-  (test_x_mat[,i] - train_mean[i])/train_sd[i]
+  
+}
+
+test_y_mat <- test[,7]
+
+
+
+```
+
+
+### **4.모델링**
+
+#### 4-1) Logistic 
+
+```{r}
+
+form <- formula(paste0('class~',paste0(colnames(train[1:6]),collapse = '+')))
+
+result <- list()
+
+train 
+
+logit <- glm(form,data=train,family=binomial(link = "logit"))
+logit_s <- glm(form,data=data.frame(train_x_mat,class=train_y_mat),binomial(link = "logit"))
+
+
+```
+
+#### 4-1) Logistic Threshold 찾기
+
+```{r}
+
+result <- list()
+logit_trshld1 <- c()
+
+
+for(i in 1:99){
+  TN <- table(ifelse(predict(logit,newdata=train,type='response') >= i/100,1,0),train$class)[1,1]
+  TP <- table(ifelse(predict(logit,newdata=train,type='response') >= i/100,1,0),train$class)[2,2]
+  logit_trshld1[i] <- (TP+TN)/dim(train)[1]
+  }
+
+
+t <- which.max(logit_trshld1)
+
+result[['logit']] <- (table(ifelse(predict(logit,newdata=test,type='response') >= t/100,1,0),test$class)[1,1] +
+                     table(ifelse(predict(logit,newdata=test,type='response') >= t/100,1,0),test$class)[2,2])/dim(test)[1]
+
+```
+
+#### 4-2) Ridge Regression 
+
+```{r}
+set.seed(1234)
+
+ridge <- cv.glmnet(train_x_mat,train_y_mat,family='binomial',type.measure = 'auc',alpha=0) # Ridge 
+ridge_lambda <- ridge$lambda.min
+
+plot(ridge)
+
+result[['ridge']] <- sum(diag(table(predict(ridge,newx=test_x_mat,s=ridge_lambda,type='class'),test_y_mat))/dim(test)[1])
+
+
+
+```
+
+#### 4-3) LASSO
+
+```{r}
+
+lasso <- cv.glmnet(train_x_mat,train_y_mat,,family='binomial',type.measure = 'auc',alpha=1) 
+lasso_lambda <- lasso$lambda.min
+
+plot(lasso)
+result[['lasso']] <- sum(diag(table(predict(lasso,newx=test_x_mat,s=lasso_lambda,type='class'),test_y_mat))/dim(test)[1])
+
+```
+
+#### 4-4) Random Forest 
+
+```{r}
+
+set.seed(1234)
+rf <- list()
+
+# Simple Tunning 
+
+grid <- expand.grid(ntree=c(100, 500, 1000,2500), mtry=c(3,4,5)) # 12가지로 나눠서 튜닝 
+temp <- c()
+
+for(i in 1:nrow(grid)){
+  
+  rf[[i]] <- randomForest(form,data=data.frame(train[,1:6],class=as.factor(train_y_mat))
+                          ,ntree=grid[i,1]
+                          ,mtry=grid[i,2]
+                          ,importance=TRUE)
+  
+  temp[i] <- sum(diag(rf[[i]]$confusion))/dim(train)[1]
+}
+```
+
+#### 4-4) OOB with Best Tunning (랜덤포레스트)
+
+```{r}
+
+grid[9,] # ntree = 100 , mtry =5 
+
+rf <- randomForest(form,data=data.frame(train[,1:6],class=factor(train$class)),ntree=100,mtry=5,importance=TRUE)
+
+oob <- data.frame(Trees = rep(1:nrow(rf$err.rate), 3), 
+                  Type = rep(c("OOB","Normal","Abnormal"), each = nrow(rf$err.rate)),
+                  Error = c(rf$err.rate[,1], rf$err.rate[,2], rf$err.rate[,3]))
+
+ggplot(data = oob, aes(x = Trees, y= Error)) + geom_line(aes(colour = Type))
+
+```
+
+```{r}
+result[['rf']] <- sum(diag(table(predict(rf,newdata=test),test_y_mat)))/dim(test)[1]
+```
+
+#### 4-5) Gradient Boosting Model 
+
+```{r}
+
+grid <- expand.grid(ntrees= c(100,200,500,1000),inter = c(1,2,3,4),learn = c(0.01,0.05,0.1))
+
+gb <- list() 
+
+# 
+# for(i in 1:nrow(grid)){
+# 
+# 
+# gb[[i]] <- gbm(form
+#     , data=train
+#     , distribution = "bernoulli"
+#     , cv.folds = 10
+#     , n.trees = grid[i,1]
+#     , interaction.depth = grid[i,2]
+#     , shrinkage = grid[i,3])
+# 
+# }
+
+
+  
+# Best 튜닝 
+
+# gb_result <- c() 
+# 
+# for(i in 1:48){
+#   gb_result[i] <- sum(diag(table(ifelse(predict(gb[[i]],newdat=train,type = 'response') >= 0.5,1,0),train_y_mat)))/dim(train)[1]
+#   
+# }
+
+
+# Best 튜닝 (ntrees =500, interaction =4 , learn = 0.05) 95.7% 정확도 
+
+
+gb <- gbm(form
+    , data=train
+    , distribution = "bernoulli"
+    , cv.folds = 10
+    , n.trees = 500
+    , interaction.depth = 4
+    , shrinkage = 0.05)
+
+
+result[['gbm']] <- sum(diag(table(ifelse(predict(gb,newdat=test,type = 'response') >= 0.5,1,0),test_y_mat)))/dim(test)[1]
+
+
+```
+
+#### Support Vector Machine 
+
+```{r}
+set.seed(1234)
+tune_svm <- tune(svm, form,train.x = train,train.y = train_y_mat,kernel="radial"
+                 ,ranges = list(cost=10^(-2:3),gamma=c(0.5,1,2,3,4))
+                 )
+tune_svm 
+# cost 1 ,gamma 0.5 (best tunning)
+
+svm_fit <-svm(form,data=train,kernel="radial",cost=1,gamma=0.5)
+
+result[['svm']] <- sum(diag(table(ifelse(predict(svm_fit,newdata=test,type='response')>=0.5,1,0),test_y_mat)))/dim(test)[1]
+
+
+
+```
+
+### **5.결론**
+
+```{r}
+
+final <- as.data.frame(do.call(rbind,result))
+
+final <- data.frame(model = rownames(final), AUC = final$V1)
+
+ggplot(final,aes(model,AUC,fill=model))+geom_bar(stat='identity')+geom_label(aes(label=AUC)) 
+
+
+```
+#### **결론 : 데이터 사이즈가 작다보니, Logistic 모형이 다른 머신러닝 방법과 성능에서 큰 차이를 보이지 않는다.**
+#### **로지스틱의 경우 Accuracy가 0.88, SVM이 0.88로 같은 성능을 보이고 있다.**
+#### **향후 다른 성능을 평가기준(Metric) 으로 모형을 적합하거나 seed를 바꿔가면서 각 모형 성능 비교가 필요하다**
+
+
+
+
+
+
+
+
+
