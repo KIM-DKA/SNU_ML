@@ -52,3 +52,5 @@ Use these biomechanical features to classify patients according to their labels
 * KNN 
 * Random Forest 
 * Boosting 계열의 모형 
+* Nuural Net
+
