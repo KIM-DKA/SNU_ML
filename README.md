@@ -1,4 +1,4 @@
-# 보건학을 위한 기계학습 중간보고서 
+# 보건학을 위한 기계학습 보거서
 
 ## 주제 : Biomechanical features of orthopedic patients
 ### 부제 : Classifying patients based on six features
